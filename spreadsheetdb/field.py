@@ -4,8 +4,8 @@ from spreadsheetdb.exception import FieldError
 class Field(object):
 
     def __init__(self, **kwargs):
-        allkeys = kwargs.iterkeys()
-        if "default" in allkeys:
+        all_keys = kwargs.iterkeys()
+        if "default" in all_keys:
             if kwargs['default'] is None:
                 raise FieldError()
             self._default=kwargs['default']
@@ -25,4 +25,7 @@ class Field(object):
 
 
 class DynamicField(Field):
+    """
+    dynamicField
+    """
     pass

@@ -1,77 +1,82 @@
 from spreadsheetdb.backend import connection as default_connection
 from spreadsheetdb.field import Field
-from spreadsheetdb.exception import SpreadSheetNotExists, EntryAlreadyExists
+from spreadsheetdb.exception import SpreadSheetNotExists, EntryAlreadyExists, EntryNotExists
 from gdata.spreadsheets.data import ListEntry
 
 
-class ModelManager(object):
+_all_fields_for_model = {}
 
-    def set_cls(self, cls):
-        self._model_cls = cls
-
-
-
-class ModelBase(type):
-
-    def __new__(cls, name, bases, dct):
-        parents = [b for b in bases if isinstance(b, ModelBase)]
-        if not parents:
-            # If this isn't a subclass of Model, don't do anything special.
-            return super(ModelBase, cls).__new__(cls, name, bases, dct)
-        if not '_fields' in dct:
-            _fields = []
-            for index, value in dct.iteritems():
-                if isinstance(value, Field):
-                    _fields.append(index)
-            cls._fields = _fields
-
-        return super(ModelBase, cls).__new__(cls, name, bases, dct)
+def all_fields_for_model(cls):
+    ret = _all_fields_for_model.get(cls.__name__)
+    if ret:
+        return _all_fields_for_model.get(cls.__name__)
+    ret = []
+    for index, value in cls.__dict__.iteritems():
+        if isinstance(value, Field):
+            ret.append(index)
+    _all_fields_for_model[cls.__name__] = ret
+    return ret
 
 
 class Model(object):
 
-    objects = ModelManager()
-    __metaclass__ = ModelBase
-
     def __init__(self, **kwargs):
         self._entry = None
-        self._data = {}
-        self._all_fields = getattr(self.__class__, '_fields')
+        self._all_fields = all_fields_for_model(self.__class__)
         for index, value in kwargs.iteritems():
             if index in self._all_fields:
-                self._data[index] = value
+                setattr(self, index, value)
             elif isinstance(value, ListEntry):
                 for field in self._all_fields:
-                    self._data[field] = value.get_value(field)
+                    setattr(self, field, value.get_value(field))
                 self._entry = value
-
-        for field in self._all_fields:
-            setattr(self, field, self._data.get(field))
+                break
 
     def save(self, connection=None):
+        """
+        save object to google spreadsheet,
+        after save, self._entry store ListEntry Object.
+        @param connection: spreadsheet connection if need
+        @raise EntryAlreadyExists: the object is already saved
+        """
         if not connection:
             connection = default_connection
+        _data = {}
         if self._entry:
             raise EntryAlreadyExists()
         for field in self._all_fields:
-            if not field in self._data:
-                self._data[field] = str(getattr(getattr(self.__class__, field), 'default'))
+            val = getattr(self, field)
+            if not isinstance(val, Field):
+                _data[field] = val
             else:
-                self._data[field] = str(self._data[field])
+                _data[field] = str(getattr(getattr(self.__class__, field), 'default'))
         try:
-            self._entry = connection.add_entry(self.__class__.table_name(), self._data)
+            self._entry = connection.add_entry(self.__class__.table_name(), _data)
         except SpreadSheetNotExists:
             connection.create_list(self.__class__)
-            self._entry = connection.add_entry(self.__class__.table_name(), self._data)
+            self._entry = connection.add_entry(self.__class__.table_name(), _data)
 
     def delete(self, connection=None):
+        """
+        delete object form google spreadsheet.
+        if self._entry is None, raise EntryNotExists
+        @param connection: spreadsheet connection if need
+        @raise EntryNotExists: the object entry does not exist
+        """
         if not connection:
             connection = default_connection
+        if self._entry:
+            raise EntryNotExists()
         connection.delete_entry(self._entry)
         self._entry = None
 
     @classmethod
     def all(cls, connection=None):
+        """
+        fetch all entries
+        @param connection: spreadsheet connection if need
+        @return: model list
+        """
         if not connection:
             connection = default_connection
         feed = connection.all_entries(cls.table_name())
@@ -79,8 +84,8 @@ class Model(object):
 
     @classmethod
     def table_name(cls):
+        """
+        if you want specific worksheet name, override this method
+        @return: table_name
+        """
         return cls.__name__
-
-    def __getattr__(self, item):
-        print item, 'asd'
-        return super(Model, self).__getattr__(self, item)
