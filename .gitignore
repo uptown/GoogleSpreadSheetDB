@@ -1,3 +1,4 @@
 spreadsheetdb/settings.py
 *.pyc
 .idea/*
+spreadsheetdb/test/model_test.py
