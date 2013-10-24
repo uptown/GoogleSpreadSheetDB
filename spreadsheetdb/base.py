@@ -1,12 +1,17 @@
-from spreadsheetdb.backend import connection as default_connection
+from spreadsheetdb.backend.connection import SpreadSheetDBConnection
 from spreadsheetdb.field import Field
-from spreadsheetdb.exception import SpreadSheetNotExists, EntryAlreadyExists, EntryNotExists
+from spreadsheetdb.exception import SpreadSheetNotExists, EntryNotExists
 from gdata.spreadsheets.data import ListEntry
 
 
 _all_fields_for_model = {}
+default_connection = SpreadSheetDBConnection.default_connection
+
 
 def all_fields_for_model(cls):
+    """
+    @todo: check
+    """
     ret = _all_fields_for_model.get(cls.__name__)
     if ret:
         return _all_fields_for_model.get(cls.__name__)
@@ -37,24 +42,43 @@ class Model(object):
         save object to google spreadsheet,
         after save, self._entry store ListEntry Object.
         @param connection: spreadsheet connection if need
-        @raise EntryAlreadyExists: the object is already saved
         """
         if not connection:
             connection = default_connection
-        _data = {}
         if self._entry:
-            raise EntryAlreadyExists()
+            self.update(connection=connection)
+        else:
+            _data = {}
+            for field in self._all_fields:
+                val = getattr(self, field)
+                if not isinstance(val, Field):
+                    _data[field] = str(val)
+                else:
+                    _data[field] = str(getattr(getattr(self.__class__, field), 'default'))
+            try:
+                self._entry = connection.add_entry(self.__class__.worksheet_name(), _data)
+            except SpreadSheetNotExists:
+                connection.create_list(self.__class__)
+                self._entry = connection.add_entry(self.__class__.worksheet_name(), _data)
+
+    def update(self, connection=None):
+        """
+        update entry
+        @param connection: spreadsheet connection if need
+        @raise EntryNotExists: entry is not set
+        """
+        if not connection:
+            connection = default_connection
+        if not self._entry:
+            raise EntryNotExists()
+        _data = {}
         for field in self._all_fields:
             val = getattr(self, field)
             if not isinstance(val, Field):
-                _data[field] = val
+                _data[field] = str(val)
             else:
                 _data[field] = str(getattr(getattr(self.__class__, field), 'default'))
-        try:
-            self._entry = connection.add_entry(self.__class__.table_name(), _data)
-        except SpreadSheetNotExists:
-            connection.create_list(self.__class__)
-            self._entry = connection.add_entry(self.__class__.table_name(), _data)
+        connection.update_entry(self._entry, _data)
 
     def delete(self, connection=None):
         """
@@ -71,6 +95,13 @@ class Model(object):
         self._entry = None
 
     @classmethod
+    def filter(cls, sq=None, order_by=None, reverse=None, connection=None):
+        if not connection:
+            connection = default_connection
+        feed = connection.filtered_entries(cls.worksheet_name(), sq=sq, order_by=order_by, reverse=reverse)
+        return [cls(entry=entry) for entry in feed]
+
+    @classmethod
     def all(cls, connection=None):
         """
         fetch all entries
@@ -79,13 +110,13 @@ class Model(object):
         """
         if not connection:
             connection = default_connection
-        feed = connection.all_entries(cls.table_name())
+        feed = connection.all_entries(cls.worksheet_name())
         return [cls(entry=entry) for entry in feed]
 
     @classmethod
-    def table_name(cls):
+    def worksheet_name(cls):
         """
         if you want specific worksheet name, override this method
-        @return: table_name
+        @return: worksheet_name
         """
         return cls.__name__
