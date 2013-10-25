@@ -1,10 +1,17 @@
+# -*- coding: utf-8 -*-
 import gdata
 from gdata.spreadsheets.client import SpreadsheetsClient, ListQuery
-from gdata.spreadsheets.data import ListEntry, ListsFeed
-
+from gdata.spreadsheets.data import ListEntry as OldListEntry, ListsFeed
 from spreadsheetdb.exception import SpreadSheetDBError, SpreadSheetNotExists
 from spreadsheetdb.field import Field
 
+
+class ListEntry(OldListEntry):
+    """
+    redefine ListEntry for using unicode...
+    """
+    def to_string(self, version=1, encode="utf-8", pretty_print=None):
+        return super(self, ListEntry).to_string(version=version, encode=encode, pretty_print=pretty_print)
 
 class SpreadSheetDBConnection(object):
     """
@@ -78,14 +85,16 @@ class SpreadSheetDBConnection(object):
         fields = []
         for index, value in model.__dict__.iteritems():
             if isinstance(value, Field):
-                fields.append(index)
+                if value.field_name:
+                    fields.append(value.field_name)
+                else:
+                    fields.append(index)
 
         if not list_name in self._worksheets.iterkeys():
             worksheet = self._client.add_worksheet(self._spreadsheet_key, list_name, 1, len(fields))
             self._worksheets[worksheet.title.text] = {'key': worksheet.get_worksheet_id(), 'row_count': worksheet.row_count.text,
                                                       'col_count': worksheet.col_count.text}
-        cell_feed = gdata.spreadsheets.data.build_batch_cells_update(
-        self._spreadsheet_key, self._worksheets[list_name]['key'])
+        cell_feed = gdata.spreadsheets.data.build_batch_cells_update(self._spreadsheet_key, self._worksheets[list_name]['key'])
         col = 1
         for index in fields:
             cell_feed.add_set_cell(1, col, index)
@@ -106,11 +115,6 @@ class SpreadSheetDBConnection(object):
         for key, val in fields.iteritems():
             inserting_row.set_value(key, val)
         ret = self._client.add_list_entry(inserting_row, self._spreadsheet_key, current_worksheet['key'])
-        #self._client.delete(ret)
-        #list_feed = self._client.get_list_feed(self._spreadsheet_key, self._worksheets[list_name]['key'])
-        #for entry in list_feed.entry:
-            #self._client.delete(entry)
-        #print list_feed
         return ret
 
     def update_entry(self, entry, data):

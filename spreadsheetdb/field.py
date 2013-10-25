@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from spreadsheetdb.exception import FieldError
 
 
@@ -14,6 +15,16 @@ class Field(object):
             self._has_default = True
         else:
             self._has_default = False
+
+        self._field_name = kwargs.get('field_name', None)
+
+    @property
+    def field_name(self):
+        """
+        if field_name is not null, the field will represent field_name in the worksheet.
+        @return:
+        """
+        return self._field_name
 
     @property
     def default(self):

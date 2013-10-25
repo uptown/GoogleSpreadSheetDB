@@ -1,4 +1,4 @@
-Google Spreadsheet wrapper 0.1
+Google Spreadsheet wrapper 0.1.1
 =====================================
 This module is for using google spreadsheet as a data-source.
 
@@ -28,6 +28,12 @@ Example
     test = TestModel1(test_field0="test4").save()
     print TestModel1.filter(test_field0="test")[0].test_field0
     test.delete()
+
+change log
+=====================================
+2013/10/25 0.1.1 unicode field name support exception question mark...
+
+2013/10/24 0.1.0 initial commit
 
 TO DO
 =====================================

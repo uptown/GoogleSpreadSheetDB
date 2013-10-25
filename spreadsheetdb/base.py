@@ -1,7 +1,7 @@
-from spreadsheetdb.backend.connection import SpreadSheetDBConnection
+# -*- coding: utf-8 -*-
+from spreadsheetdb.backend.connection import SpreadSheetDBConnection, ListEntry
 from spreadsheetdb.field import Field
 from spreadsheetdb.exception import SpreadSheetNotExists, EntryNotExists
-from gdata.spreadsheets.data import ListEntry
 
 
 _all_fields_for_model = {}
@@ -12,28 +12,29 @@ def all_fields_for_model(cls):
     """
     @todo: check
     """
-    ret = _all_fields_for_model.get(cls.__name__)
-    if ret:
+    if _all_fields_for_model.get(cls.__name__):
         return _all_fields_for_model.get(cls.__name__)
     ret = []
+    names_dict = {}
     for index, value in cls.__dict__.iteritems():
         if isinstance(value, Field):
             ret.append(index)
-    _all_fields_for_model[cls.__name__] = ret
-    return ret
+            names_dict[index] = value.field_name if value.field_name else index
+    _all_fields_for_model[cls.__name__] = ret, names_dict
+    return ret, names_dict
 
 
 class Model(object):
 
     def __init__(self, **kwargs):
         self._entry = None
-        self._all_fields = all_fields_for_model(self.__class__)
+        self._all_fields, self._names_dict = all_fields_for_model(self.__class__)
         for index, value in kwargs.iteritems():
             if index in self._all_fields:
                 setattr(self, index, value)
             elif isinstance(value, ListEntry):
-                for field in self._all_fields:
-                    setattr(self, field, value.get_value(field))
+                for field in self._names_dict.iterkeys():
+                    setattr(self, self._names_dict[field], value.get_value(field))
                 self._entry = value
                 break
 
@@ -48,13 +49,7 @@ class Model(object):
         if self._entry:
             self.update(connection=connection)
         else:
-            _data = {}
-            for field in self._all_fields:
-                val = getattr(self, field)
-                if not isinstance(val, Field):
-                    _data[field] = str(val)
-                else:
-                    _data[field] = str(getattr(getattr(self.__class__, field), 'default'))
+            _data = self._construct_data()
             try:
                 self._entry = connection.add_entry(self.__class__.worksheet_name(), _data)
             except SpreadSheetNotExists:
@@ -71,14 +66,18 @@ class Model(object):
             connection = default_connection
         if not self._entry:
             raise EntryNotExists()
+        _data = self._construct_data()
+        connection.update_entry(self._entry, _data)
+
+    def _construct_data(self):
         _data = {}
         for field in self._all_fields:
             val = getattr(self, field)
             if not isinstance(val, Field):
-                _data[field] = str(val)
+                _data[self._names_dict[field].decode("utf8")] = str(val).decode("utf8")
             else:
-                _data[field] = str(getattr(getattr(self.__class__, field), 'default'))
-        connection.update_entry(self._entry, _data)
+                _data[self._names_dict[field].decode("utf8")] = str(getattr(getattr(self.__class__, field), 'default')).decode("utf8")
+        return _data
 
     def delete(self, connection=None):
         """

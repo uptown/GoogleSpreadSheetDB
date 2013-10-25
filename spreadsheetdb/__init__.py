@@ -28,6 +28,11 @@
 
 
     :license: MIT License, see LICENSE for more details
+
+    change log
+    ~~~~~~~~~~~~~~~~~~~~
+    2013/10/25 0.1.1 unicode field name support exception question mark...
+    2013/10/24 0.1.0 initial commit
 """
 
 __author__ = 'uptown(uptownlee89@gmail.com'
